@@ -13,6 +13,7 @@ import (
 type StandAloneStorage struct {
 	// Your Data Here (1).
 	conf *config.Config
+	db   *badger.DB
 }
 
 func NewStandAloneStorage(conf *config.Config) *StandAloneStorage {
@@ -22,34 +23,36 @@ func NewStandAloneStorage(conf *config.Config) *StandAloneStorage {
 
 func (s *StandAloneStorage) Start() error {
 	// Your Code Here (1).
-
+	option := badger.DefaultOptions
+	option.Dir = s.conf.DBPath
+	option.ValueDir = s.conf.DBPath
+	s.db, _ = badger.Open(option)
 	return nil
 }
 
 func (s *StandAloneStorage) Stop() error {
 	// Your Code Here (1).
+	// .db.Close()
 	return nil
 }
 
 func (s *StandAloneStorage) Reader(ctx *kvrpcpb.Context) (storage.StorageReader, error) {
 	// Your Code Here (1).
-	db, err := badger.Open(badger.Options{Dir: s.conf.DBPath})
-	return &standaloneReader{s, 0, db}, err
+	return &standaloneReader{s, 0, s.db, s.db.NewTransaction(false)}, nil
 }
 
 func (s *StandAloneStorage) Write(ctx *kvrpcpb.Context, batch []storage.Modify) error {
 	// Your Code Here (1).
-	db, _ := badger.Open(badger.Options{Dir: s.conf.DBPath})
 	// txn := db.NewTransaction(true)
 	for _, m := range batch {
 		switch data := m.Data.(type) {
 		case storage.Put:
-			err := engine_util.PutCF(db, data.Cf, data.Key, data.Value)
+			err := engine_util.PutCF(s.db, data.Cf, data.Key, data.Value)
 			if err != nil {
 				return err
 			}
 		case storage.Delete:
-			err := engine_util.DeleteCF(db, data.Cf, data.Key)
+			err := engine_util.DeleteCF(s.db, data.Cf, data.Key)
 			if err != nil {
 				return err
 			}
@@ -63,24 +66,24 @@ type standaloneReader struct {
 	inner     *StandAloneStorage
 	iterCount int
 	db        *badger.DB
+	txn       *badger.Txn
 }
 
 func (s standaloneReader) GetCF(cf string, key []byte) ([]byte, error) {
 	//TODO implement me
-	txn := s.db.NewTransaction(false)
-	return engine_util.GetCFFromTxn(txn, cf, key)
+	val, err := engine_util.GetCFFromTxn(s.txn, cf, key)
+	if err != nil && err.Error() == "Key not found" {
+		return nil, nil
+	}
+	return val, err
 }
 
 func (s standaloneReader) IterCF(cf string) engine_util.DBIterator {
 	//TODO implement me
-	txn := s.db.NewTransaction(false)
-	return engine_util.NewCFIterator(cf, txn)
+	return engine_util.NewCFIterator(cf, s.txn)
 }
 
 func (s standaloneReader) Close() {
 	//TODO implement me
-	err := s.db.Close()
-	if err != nil {
-		return
-	}
+	s.txn.Discard()
 }
