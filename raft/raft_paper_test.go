@@ -27,6 +27,7 @@ package raft
 
 import (
 	"fmt"
+	"github.com/pingcap-incubator/tinykv/log"
 	"reflect"
 	"sort"
 	"testing"
@@ -35,12 +36,15 @@ import (
 )
 
 func TestFollowerUpdateTermFromMessage2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	testUpdateTermFromMessage(t, StateFollower)
 }
 func TestCandidateUpdateTermFromMessage2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	testUpdateTermFromMessage(t, StateCandidate)
 }
 func TestLeaderUpdateTermFromMessage2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	testUpdateTermFromMessage(t, StateLeader)
 }
 
@@ -74,6 +78,7 @@ func testUpdateTermFromMessage(t *testing.T, state StateType) {
 // TestStartAsFollower tests that when servers start up, they begin as followers.
 // Reference: section 5.2
 func TestStartAsFollower2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	r := newTestRaft(1, []uint64{1, 2, 3}, 10, 1, NewMemoryStorage())
 	if r.State != StateFollower {
 		t.Errorf("state = %s, want %s", r.State, StateFollower)
@@ -85,6 +90,7 @@ func TestStartAsFollower2AA(t *testing.T) {
 // as heartbeat to all followers.
 // Reference: section 5.2
 func TestLeaderBcastBeat2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	// heartbeat interval
 	hi := 1
 	r := newTestRaft(1, []uint64{1, 2, 3}, 10, hi, NewMemoryStorage())
@@ -110,9 +116,11 @@ func TestLeaderBcastBeat2AA(t *testing.T) {
 }
 
 func TestFollowerStartElection2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	testNonleaderStartElection(t, StateFollower)
 }
 func TestCandidateStartNewElection2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	testNonleaderStartElection(t, StateCandidate)
 }
 
@@ -168,6 +176,7 @@ func testNonleaderStartElection(t *testing.T, state StateType) {
 // c) it is unclear about the result
 // Reference: section 5.2
 func TestLeaderElectionInOneRoundRPC2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	tests := []struct {
 		size  int
 		votes map[uint64]bool
@@ -208,6 +217,7 @@ func TestLeaderElectionInOneRoundRPC2AA(t *testing.T) {
 // candidate in a given term, on a first-come-first-served basis.
 // Reference: section 5.2
 func TestFollowerVote2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	tests := []struct {
 		vote    uint64
 		nvote   uint64
@@ -243,6 +253,7 @@ func TestFollowerVote2AA(t *testing.T) {
 // it recognizes the leader as legitimate and returns to follower state.
 // Reference: section 5.2
 func TestCandidateFallback2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	tests := []pb.Message{
 		{From: 2, To: 1, Term: 1, MsgType: pb.MessageType_MsgAppend},
 		{From: 2, To: 1, Term: 2, MsgType: pb.MessageType_MsgAppend},
@@ -266,9 +277,11 @@ func TestCandidateFallback2AA(t *testing.T) {
 }
 
 func TestFollowerElectionTimeoutRandomized2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	testNonleaderElectionTimeoutRandomized(t, StateFollower)
 }
 func TestCandidateElectionTimeoutRandomized2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	testNonleaderElectionTimeoutRandomized(t, StateCandidate)
 }
 
@@ -303,9 +316,11 @@ func testNonleaderElectionTimeoutRandomized(t *testing.T, state StateType) {
 }
 
 func TestFollowersElectionTimeoutNonconflict2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	testNonleadersElectionTimeoutNonconflict(t, StateFollower)
 }
 func TestCandidatesElectionTimeoutNonconflict2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	testNonleadersElectionTimeoutNonconflict(t, StateCandidate)
 }
 

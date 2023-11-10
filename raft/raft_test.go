@@ -17,6 +17,7 @@ package raft
 import (
 	"bytes"
 	"fmt"
+	"github.com/pingcap-incubator/tinykv/log"
 	"math/rand"
 	"reflect"
 	"testing"
@@ -73,6 +74,7 @@ func TestProgressLeader2AB(t *testing.T) {
 }
 
 func TestLeaderElection2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	var cfg func(*Config)
 	tests := []struct {
 		*network
@@ -102,6 +104,7 @@ func TestLeaderElection2AA(t *testing.T) {
 // and be elected in turn. This ensures that elections work when not
 // starting from a clean slate (as they do in TestLeaderElection)
 func TestLeaderCycle2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	var cfg func(*Config)
 	n := newNetworkWithConfig(cfg, nil, nil, nil)
 	for campaignerID := uint64(1); campaignerID <= 3; campaignerID++ {
@@ -189,6 +192,7 @@ func TestLeaderElectionOverwriteNewerLogs2AB(t *testing.T) {
 }
 
 func TestVoteFromAnyState2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	vt := pb.MessageType_MsgRequestVote
 	vt_resp := pb.MessageType_MsgRequestVoteResponse
 	for st := StateType(0); st <= StateLeader; st++ {
@@ -481,6 +485,7 @@ func TestCandidateConcede2AB(t *testing.T) {
 }
 
 func TestSingleNodeCandidate2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	tt := newNetwork(nil)
 	tt.send(pb.Message{From: 1, To: 1, MsgType: pb.MessageType_MsgHup})
 
@@ -562,10 +567,10 @@ func TestProposal2AB(t *testing.T) {
 }
 
 // TestHandleMessageType_MsgAppend ensures:
-// 1. Reply false if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm.
-// 2. If an existing entry conflicts with a new one (same index but different terms),
-//    delete the existing entry and all that follow it; append any new entries not already in the log.
-// 3. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry).
+//  1. Reply false if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm.
+//  2. If an existing entry conflicts with a new one (same index but different terms),
+//     delete the existing entry and all that follow it; append any new entries not already in the log.
+//  3. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry).
 func TestHandleMessageType_MsgAppend2AB(t *testing.T) {
 	tests := []struct {
 		m       pb.Message
@@ -748,10 +753,12 @@ func TestAllServerStepdown2AB(t *testing.T) {
 }
 
 func TestCandidateResetTermMessageType_MsgHeartbeat2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	testCandidateResetTerm(t, pb.MessageType_MsgHeartbeat)
 }
 
 func TestCandidateResetTermMessageType_MsgAppend2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	testCandidateResetTerm(t, pb.MessageType_MsgAppend)
 }
 
@@ -815,6 +822,7 @@ func testCandidateResetTerm(t *testing.T, mt pb.MessageType) {
 // candiate's response to late leader heartbeat forces the leader
 // to step down.
 func TestDisruptiveFollower2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	n1 := newTestRaft(1, []uint64{1, 2, 3}, 10, 1, NewMemoryStorage())
 	n2 := newTestRaft(2, []uint64{1, 2, 3}, 10, 1, NewMemoryStorage())
 	n3 := newTestRaft(3, []uint64{1, 2, 3}, 10, 1, NewMemoryStorage())
@@ -948,6 +956,7 @@ func TestHeartbeatUpdateCommit2AB(t *testing.T) {
 
 // tests the output of the state machine when receiving MessageType_MsgBeat
 func TestRecvMessageType_MsgBeat2AA(t *testing.T) {
+	// log.SetLevel(log.LOG_LEVEL_NONE)
 	tests := []struct {
 		state StateType
 		wMsg  int
@@ -1184,6 +1193,7 @@ func TestRemoveNode3A(t *testing.T) {
 }
 
 func TestCampaignWhileLeader2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	cfg := newTestConfig(1, []uint64{1}, 5, 1, NewMemoryStorage())
 	r := newRaft(cfg)
 	if r.State != StateFollower {
@@ -1474,6 +1484,7 @@ func TestTransferNonMember3A(t *testing.T) {
 // TestSplitVote verifies that after split vote, cluster can complete
 // election in next round.
 func TestSplitVote2AA(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	n1 := newTestRaft(1, []uint64{1, 2, 3}, 10, 1, NewMemoryStorage())
 	n2 := newTestRaft(2, []uint64{1, 2, 3}, 10, 1, NewMemoryStorage())
 	n3 := newTestRaft(3, []uint64{1, 2, 3}, 10, 1, NewMemoryStorage())
