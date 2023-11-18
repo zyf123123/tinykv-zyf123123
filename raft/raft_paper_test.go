@@ -371,11 +371,12 @@ func testNonleadersElectionTimeoutNonconflict(t *testing.T, state StateType) {
 // the leader appends the proposal to its log as a new entry, then issues
 // AppendEntries RPCs in parallel to each of the other servers to replicate
 // the entry. Also, when sending an AppendEntries RPC, the leader includes
-// the index and term of the entry in its log that immediately precedes
-// the new entries.
+// // the index and term of the entry in its log that immediately precedes
+// // the new entries.
 // Also, it writes the new entry into stable storage.
 // Reference: section 5.3
 func TestLeaderStartReplication2AB(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	s := NewMemoryStorage()
 	r := newTestRaft(1, []uint64{1, 2, 3}, 10, 1, s)
 	r.becomeCandidate()
@@ -416,6 +417,7 @@ func TestLeaderStartReplication2AB(t *testing.T) {
 // servers eventually find out.
 // Reference: section 5.3
 func TestLeaderCommitEntry2AB(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	s := NewMemoryStorage()
 	r := newTestRaft(1, []uint64{1, 2, 3}, 10, 1, s)
 	r.becomeCandidate()
@@ -454,6 +456,7 @@ func TestLeaderCommitEntry2AB(t *testing.T) {
 // leader that created the entry has replicated it on a majority of the servers.
 // Reference: section 5.3
 func TestLeaderAcknowledgeCommit2AB(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	tests := []struct {
 		size      int
 		acceptors map[uint64]bool
@@ -496,6 +499,7 @@ func TestLeaderAcknowledgeCommit2AB(t *testing.T) {
 // Also, it applies the entry to its local state machine (in log order).
 // Reference: section 5.3
 func TestLeaderCommitPrecedingEntries2AB(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	tests := [][]pb.Entry{
 		{},
 		{{Term: 2, Index: 1}},
@@ -527,6 +531,7 @@ func TestLeaderCommitPrecedingEntries2AB(t *testing.T) {
 // is committed, it applies the entry to its local state machine (in log order).
 // Reference: section 5.3
 func TestFollowerCommitEntry2AB(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	tests := []struct {
 		ents   []*pb.Entry
 		commit uint64
@@ -584,6 +589,7 @@ func TestFollowerCommitEntry2AB(t *testing.T) {
 // append entries.
 // Reference: section 5.3
 func TestFollowerCheckMessageType_MsgAppend2AB(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	ents := []pb.Entry{{Term: 1, Index: 1}, {Term: 2, Index: 2}}
 	tests := []struct {
 		term    uint64
@@ -630,6 +636,7 @@ func TestFollowerCheckMessageType_MsgAppend2AB(t *testing.T) {
 // Also, it writes the new entry into stable storage.
 // Reference: section 5.3
 func TestFollowerAppendEntries2AB(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	tests := []struct {
 		index, term uint64
 		lterm       uint64
@@ -694,6 +701,7 @@ func TestFollowerAppendEntries2AB(t *testing.T) {
 // into consistency with its own.
 // Reference: section 5.3, figure 7
 func TestLeaderSyncFollowerLog2AB(t *testing.T) {
+	// log.SetLevel(log.LOG_LEVEL_NONE)
 	ents := []pb.Entry{
 		{},
 		{Term: 1, Index: 1}, {Term: 1, Index: 2}, {Term: 1, Index: 3},
@@ -773,6 +781,7 @@ func TestLeaderSyncFollowerLog2AB(t *testing.T) {
 // and are sent to all of the other nodes.
 // Reference: section 5.4.1
 func TestVoteRequest2AB(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	tests := []struct {
 		ents  []*pb.Entry
 		wterm uint64
@@ -821,6 +830,7 @@ func TestVoteRequest2AB(t *testing.T) {
 // than that of the candidate.
 // Reference: section 5.4.1
 func TestVoter2AB(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	tests := []struct {
 		ents    []pb.Entry
 		logterm uint64
@@ -866,6 +876,7 @@ func TestVoter2AB(t *testing.T) {
 // current term are committed by counting replicas.
 // Reference: section 5.4.2
 func TestLeaderOnlyCommitsLogFromCurrentTerm2AB(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	ents := []pb.Entry{{Term: 1, Index: 1}, {Term: 2, Index: 2}}
 	tests := []struct {
 		index   uint64

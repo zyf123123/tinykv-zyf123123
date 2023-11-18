@@ -57,6 +57,7 @@ func (r *Raft) readMessages() []pb.Message {
 }
 
 func TestProgressLeader2AB(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	r := newTestRaft(1, []uint64{1, 2}, 5, 1, NewMemoryStorage())
 	r.becomeCandidate()
 	r.becomeLeader()
@@ -129,6 +130,7 @@ func TestLeaderCycle2AA(t *testing.T) {
 // log entries, and must overwrite higher-term log entries with
 // lower-term ones.
 func TestLeaderElectionOverwriteNewerLogs2AB(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	cfg := func(c *Config) {
 		c.peers = idsBySize(5)
 	}
@@ -252,6 +254,7 @@ func TestVoteFromAnyState2AA(t *testing.T) {
 }
 
 func TestLogReplication2AB(t *testing.T) {
+	log.SetLevel(log.LOG_LEVEL_NONE)
 	tests := []struct {
 		*network
 		msgs       []pb.Message
