@@ -203,6 +203,16 @@ type Raft struct {
 	step stepFunc
 }
 
+func (r *Raft) softState() *SoftState { return &SoftState{Lead: r.Lead, RaftState: r.State} }
+
+func (r *Raft) hardState() pb.HardState {
+	return pb.HardState{
+		Term:   r.Term,
+		Vote:   r.Vote,
+		Commit: r.RaftLog.committed,
+	}
+}
+
 func (r *Raft) loadState(state pb.HardState) {
 	r.Term = state.Term
 	r.Vote = state.Vote
@@ -223,7 +233,7 @@ func newRaft(c *Config) *Raft {
 		Prs:              map[uint64]*Progress{},
 		State:            StateFollower,
 		votes:            map[uint64]bool{},
-		msgs:             []pb.Message{},
+		msgs:             []pb.Message(nil),
 		Lead:             0,
 		heartbeatTimeout: c.HeartbeatTick,
 		electionTimeout:  c.ElectionTick,

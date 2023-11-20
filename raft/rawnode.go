@@ -16,6 +16,7 @@ package raft
 
 import (
 	"errors"
+	"reflect"
 
 	pb "github.com/pingcap-incubator/tinykv/proto/pkg/eraftpb"
 )
@@ -70,12 +71,56 @@ type Ready struct {
 type RawNode struct {
 	Raft *Raft
 	// Your Data Here (2A).
+	PrevSoftSt *SoftState
+	PrevHardSt pb.HardState
+	ReadyState Ready
 }
 
 // NewRawNode returns a new RawNode given configuration and a list of raft peers.
 func NewRawNode(config *Config) (*RawNode, error) {
 	// Your Code Here (2A).
-	return nil, nil
+	if config.ID == 0 {
+		panic("config.ID must not be zero")
+	}
+	r := newRaft(config)
+	rn := &RawNode{
+		Raft: r,
+	}
+	lastIndex, err := config.Storage.LastIndex()
+	if err != nil {
+		panic(err)
+	}
+	// If the log is empty, this is a new RawNode (like StartNode); otherwise it's
+	// restoring an existing RawNode (like RestartNode).
+	// TODO(bdarnell): rethink RawNode initialization and whether the application needs
+	// to be able to tell us when it expects the RawNode to exist.
+	if lastIndex == 0 {
+		r.becomeFollower(1, None)
+		ents := make([]pb.Entry, len(config.peers))
+		for i, peer := range config.peers {
+			cc := pb.ConfChange{ChangeType: pb.ConfChangeType_AddNode, NodeId: peer}
+			data, err := cc.Marshal()
+			if err != nil {
+				panic("unexpected marshal error")
+			}
+
+			ents[i] = pb.Entry{EntryType: pb.EntryType_EntryConfChange, Term: 1, Index: uint64(i + 1), Data: data}
+		}
+		r.RaftLog.append(ents...)
+		r.RaftLog.committed = uint64(len(ents))
+		for _, peer := range config.peers {
+			r.addNode(peer)
+		}
+	}
+
+	// Set the initial hard and soft states after performing all initialization.
+	rn.PrevSoftSt = r.softState()
+	if lastIndex == 0 {
+		rn.PrevHardSt = pb.HardState{}
+	} else {
+		rn.PrevHardSt = r.hardState()
+	}
+	return rn, nil
 }
 
 // Tick advances the internal logical clock by a single tick.
@@ -143,19 +188,43 @@ func (rn *RawNode) Step(m pb.Message) error {
 // Ready returns the current point-in-time state of this RawNode.
 func (rn *RawNode) Ready() Ready {
 	// Your Code Here (2A).
-	return Ready{}
+	rn.ReadyState = Ready{
+		Entries:          rn.Raft.RaftLog.unstableEntries(),
+		CommittedEntries: rn.Raft.RaftLog.nextEnts(),
+		Messages:         rn.Raft.msgs,
+	}
+	if rn.PrevSoftSt.Lead != rn.Raft.softState().Lead || rn.PrevSoftSt.RaftState != rn.Raft.softState().RaftState {
+		rn.ReadyState.SoftState = rn.Raft.softState()
+	} else {
+		rn.ReadyState.SoftState = nil
+	}
+	if !reflect.DeepEqual(rn.PrevHardSt, rn.Raft.hardState()) {
+		rn.ReadyState.HardState = rn.Raft.hardState()
+	}
+	return rn.ReadyState
 }
 
 // HasReady called when RawNode user need to check if any Ready pending.
 func (rn *RawNode) HasReady() bool {
 	// Your Code Here (2A).
-	return false
+	return rn.ReadyState.SoftState != nil ||
+		!IsEmptyHardState(rn.ReadyState.HardState) ||
+		len(rn.ReadyState.Entries) > 0 ||
+		len(rn.ReadyState.CommittedEntries) > 0 ||
+		len(rn.ReadyState.Messages) > 0
 }
 
 // Advance notifies the RawNode that the application has applied and saved progress in the
 // last Ready results.
 func (rn *RawNode) Advance(rd Ready) {
 	// Your Code Here (2A).
+	if rn.HasReady() {
+		rd = rn.Ready()
+		rn.ReadyState = Ready{}
+		rn.Raft.RaftLog.stabled = rn.Raft.RaftLog.LastIndex()
+		rn.Raft.RaftLog.applied = rn.Raft.RaftLog.LastIndex()
+		rn.Raft.msgs = nil
+	}
 }
 
 // GetProgress return the Progress of this node and its peers, if this
