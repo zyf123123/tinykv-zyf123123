@@ -120,6 +120,7 @@ func NewRawNode(config *Config) (*RawNode, error) {
 	} else {
 		rn.PrevHardSt = r.hardState()
 	}
+
 	return rn, nil
 }
 
@@ -207,6 +208,12 @@ func (rn *RawNode) Ready() Ready {
 // HasReady called when RawNode user need to check if any Ready pending.
 func (rn *RawNode) HasReady() bool {
 	// Your Code Here (2A).
+	rn.ReadyState = Ready{
+		Entries:          rn.Raft.RaftLog.unstableEntries(),
+		CommittedEntries: rn.Raft.RaftLog.nextEnts(),
+		Messages:         rn.Raft.msgs,
+	}
+
 	return rn.ReadyState.SoftState != nil ||
 		!IsEmptyHardState(rn.ReadyState.HardState) ||
 		len(rn.ReadyState.Entries) > 0 ||
@@ -222,7 +229,7 @@ func (rn *RawNode) Advance(rd Ready) {
 		rd = rn.Ready()
 		rn.ReadyState = Ready{}
 		rn.Raft.RaftLog.stabled = rn.Raft.RaftLog.LastIndex()
-		rn.Raft.RaftLog.applied = rn.Raft.RaftLog.LastIndex()
+		rn.Raft.RaftLog.applied = rn.Raft.RaftLog.committed
 		rn.Raft.msgs = nil
 	}
 }

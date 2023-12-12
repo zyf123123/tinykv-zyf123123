@@ -30,6 +30,7 @@ func runClient(t *testing.T, me int, ca chan bool, fn func(me int, t *testing.T)
 
 // spawn ncli clients and wait until they are all done
 func SpawnClientsAndWait(t *testing.T, ch chan bool, ncli int, fn func(me int, t *testing.T)) {
+	//log.SetLevel(log.LOG_LEVEL_ERROR)
 	defer func() { ch <- true }()
 	ca := make([]chan bool, ncli)
 	for cli := 0; cli < ncli; cli++ {
@@ -143,6 +144,7 @@ func confchanger(t *testing.T, cluster *Cluster, ch chan bool, done *int32) {
 // - If confchange is set, the cluster will schedule random conf change concurrently.
 // - If split is set, split region when size exceed 1024 bytes.
 func GenericTest(t *testing.T, part string, nclients int, unreliable bool, crash bool, partitions bool, maxraftlog int, confchange bool, split bool) {
+	log.SetLevel(log.LOG_LEVEL_ERROR)
 	title := "Test: "
 	if unreliable {
 		// the network drops RPC requests and replies.
@@ -207,14 +209,14 @@ func GenericTest(t *testing.T, part string, nclients int, unreliable bool, crash
 				if (rand.Int() % 1000) < 500 {
 					key := strconv.Itoa(cli) + " " + fmt.Sprintf("%08d", j)
 					value := "x " + strconv.Itoa(cli) + " " + strconv.Itoa(j) + " y"
-					// log.Infof("%d: client new put %v,%v\n", cli, key, value)
+					log.Infof("%d: client new put %v,%v\n", cli, key, value)
 					cluster.MustPut([]byte(key), []byte(value))
 					last = NextValue(last, value)
 					j++
 				} else {
 					start := strconv.Itoa(cli) + " " + fmt.Sprintf("%08d", 0)
 					end := strconv.Itoa(cli) + " " + fmt.Sprintf("%08d", j)
-					// log.Infof("%d: client new scan %v-%v\n", cli, start, end)
+					log.Infof("%d: client new scan %v-%v\n", cli, start, end)
 					values := cluster.Scan([]byte(start), []byte(end))
 					v := string(bytes.Join(values, []byte("")))
 					if v != last {
@@ -331,6 +333,7 @@ func GenericTest(t *testing.T, part string, nclients int, unreliable bool, crash
 
 func TestBasic2B(t *testing.T) {
 	// Test: one client (2B) ...
+	//log.SetLevel(log.LOG_LEVEL_NONE)
 	GenericTest(t, "2B", 1, false, false, false, -1, false, false)
 }
 
@@ -391,6 +394,7 @@ func TestOnePartition2B(t *testing.T) {
 	MustGetEqual(cluster.engines[s1[0]], []byte("k1"), []byte("v1"))
 	MustGetEqual(cluster.engines[s1[1]], []byte("k1"), []byte("v1"))
 	cluster.ClearFilters()
+	log.Infof("filters cleared")
 
 	// when partition heals, old leader should sync data
 	cluster.MustPut([]byte("k2"), []byte("v2"))

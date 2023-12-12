@@ -243,14 +243,18 @@ func newRaft(c *Config) *Raft {
 		PendingConfIndex: 0,
 	}
 
-	for _, p := range c.peers {
-		raftPeer.Prs[p] = &Progress{Next: 1}
+	hardState, confState, _ := c.Storage.InitialState()
+	if c.peers == nil {
+		c.peers = confState.Nodes
 	}
 
-	hardstate, _, _ := c.Storage.InitialState()
 	// 如果不是第一次启动而是从之前的数据进行恢复
-	if !IsEmptyHardState(hardstate) {
-		raftPeer.loadState(hardstate)
+	if !IsEmptyHardState(hardState) {
+		raftPeer.loadState(hardState)
+	}
+
+	for _, p := range c.peers {
+		raftPeer.Prs[p] = &Progress{Next: 1}
 	}
 
 	return &raftPeer
@@ -301,11 +305,14 @@ func (r *Raft) quorum() int { return len(r.Prs)/2 + 1 }
 // sendHeartbeat sends a heartbeat RPC to the given peer.
 func (r *Raft) sendHeartbeat(to uint64) {
 	// Your Code Here (2A).
+	// commit index取需要发送过去的节点的match已经当前leader的commited中的较小值
+	commit := min(r.Prs[to].Match, r.RaftLog.committed)
 	m := pb.Message{
 		MsgType: pb.MessageType_MsgHeartbeat,
 		To:      to,
 		From:    r.id,
 		Term:    r.Term,
+		Commit:  commit,
 	}
 	r.send(m)
 }
@@ -454,6 +461,7 @@ func (r *Raft) maybeCommit() bool {
 	// 说明有过半的节点至少comit了mci这个索引的数据，这样leader就可以以这个索引进行commit了
 	mci := mis[r.quorum()-1]
 	// raft日志尝试commit
+	// log.Infof("%d maybe commit %d now %d", r.id, mci, r.RaftLog.committed)
 	return r.RaftLog.maybeCommit(mci, r.Term)
 }
 
@@ -481,8 +489,7 @@ func (r *Raft) campaign() {
 	}
 	for peerId := range r.Prs {
 		if peerId != r.id {
-			log.Infof("%x sent %s request to %x at term %d",
-				r.id, pb.MessageType_MsgRequestVote, peerId, r.Term)
+			log.Infof("%x sent %s request to %x at term %d", r.id, pb.MessageType_MsgRequestVote, peerId, r.Term)
 			r.send(pb.Message{
 				MsgType: pb.MessageType_MsgRequestVote,
 				To:      peerId,
@@ -513,13 +520,12 @@ func (r *Raft) Step(m pb.Message) error {
 	if r.step == nil {
 		r.EvaluateStep(r.State)
 	}
-	log.Infof("%d receive message %s from %d term %d", r.id, m.MsgType, m.From, m.Term)
+	// log.Infof("%d receive message %s from %d term %d", r.id, m.MsgType, m.From, m.Term)
 	switch {
 	case m.Term == 0:
 	// local message
 	case m.Term > r.Term:
-		log.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d]",
-			r.id, r.Term, m.MsgType, m.From, m.Term)
+		log.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d]", r.id, r.Term, m.MsgType, m.From, m.Term)
 		r.becomeFollower(m.Term, 0)
 	case m.Term < r.Term:
 		return nil
@@ -674,6 +680,7 @@ func stepLeader(r *Raft, m pb.Message) {
 				// 尝试commit
 				if r.maybeCommit() {
 					// 如果commit成功，那么就向集群其他节点广播append消息
+					log.Infof("%d commit to %d", r.id, r.RaftLog.committed)
 					r.bcastAppend()
 				}
 			}
@@ -717,7 +724,7 @@ func (r *Raft) handleAppendEntries(m pb.Message) {
 // handleHeartbeat handle Heartbeat RPC request
 func (r *Raft) handleHeartbeat(m pb.Message) {
 	// Your Code Here (2A).
-	log.Infof("%d handle heartbeat from %d", r.id, m.From)
+	// log.Infof("%d handle heartbeat from %d", r.id, m.From)
 	r.RaftLog.CommitTo(m.Commit)
 	r.send(pb.Message{
 		MsgType: pb.MessageType_MsgHeartbeatResponse,

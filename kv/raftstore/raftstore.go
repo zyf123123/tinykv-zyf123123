@@ -2,6 +2,7 @@ package raftstore
 
 import (
 	"bytes"
+	"github.com/pingcap-incubator/tinykv/log"
 	"sync"
 	"time"
 
@@ -15,7 +16,6 @@ import (
 	"github.com/pingcap-incubator/tinykv/kv/raftstore/snap"
 	"github.com/pingcap-incubator/tinykv/kv/util/engine_util"
 	"github.com/pingcap-incubator/tinykv/kv/util/worker"
-	"github.com/pingcap-incubator/tinykv/log"
 	"github.com/pingcap-incubator/tinykv/proto/pkg/metapb"
 	rspb "github.com/pingcap-incubator/tinykv/proto/pkg/raft_serverpb"
 	"github.com/pingcap-incubator/tinykv/scheduler/pkg/btree"
@@ -104,8 +104,8 @@ type Transport interface {
 	Send(msg *rspb.RaftMessage) error
 }
 
-/// loadPeers loads peers in this store. It scans the db engine, loads all regions and their peers from it
-/// WARN: This store should not be used before initialized.
+// / loadPeers loads peers in this store. It scans the db engine, loads all regions and their peers from it
+// / WARN: This store should not be used before initialized.
 func (bs *Raftstore) loadPeers() ([]*peer, error) {
 	// Scan region meta to get saved regions.
 	startKey := meta.RegionMetaMinKey
@@ -170,7 +170,7 @@ func (bs *Raftstore) loadPeers() ([]*peer, error) {
 	}
 	kvWB.MustWriteToDB(ctx.engine.Kv)
 	raftWB.MustWriteToDB(ctx.engine.Raft)
-
+	//log.SetLevel(log.LOG_LEVEL_ERROR)
 	log.Infof("start store %d, region_count %d, tombstone_count %d, takes %v",
 		storeID, totalCount, tombStoneCount, time.Since(t))
 	return regionPeers, nil

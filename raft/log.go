@@ -113,8 +113,11 @@ func (l *RaftLog) MaybeAppend(index, logTerm, committed uint64, ents []pb.Entry)
 			offset := index + 1
 			// 从查找到的数据索引开始，将这之后的数据放入到unstable存储中
 			l.append(ents[ci-offset:]...)
+			log.Infof("entry %d conflict with uncommitted entry [last committed index(%d), last committed term(%d)]", ci, l.LastIndex(), l.LastTerm())
+			log.Infof("log append %d [%d:%d] to unstable storage at %d, now len %d", ci-offset, ci, len(ents), l.LastIndex(), len(l.entries))
 		}
 		// 选择committed和lastnewi中的最小者进行commit
+		log.Infof("committing index %d lastnewi %d", committed, lastnewi)
 		l.CommitTo(min(committed, lastnewi))
 		return lastnewi, true
 	}
@@ -131,7 +134,7 @@ func (l *RaftLog) CommitTo(tocommit uint64) {
 			log.Panicf("tocommit(%d) is out of range [lastIndex(%d)]. Was the raft log corrupted, truncated, or lost?", tocommit, l.LastIndex())
 		}
 		l.committed = tocommit
-		log.Infof("commit to %d", tocommit)
+		log.Infof("log commit to %d", tocommit)
 	}
 }
 
@@ -221,6 +224,7 @@ func (l *RaftLog) unstableOffset() uint64 {
 func (l *RaftLog) nextEnts() (ents []pb.Entry) {
 	// Your Code Here (2A).
 	off := max(l.applied+1, l.FirstIndex())
+	// log.Infof("nextEnts: applied(%d), off(%d), committed(%d), lastIndex(%d)", l.applied, off, l.committed, l.LastIndex())
 	if l.committed+1 > off { // 如果commit索引比前面得到的值还大，说明还有没有commit了但是还没apply的数据，将这些数据返回
 		ents, err := l.Slice(off, l.committed+1)
 		if err != nil {
