@@ -53,6 +53,19 @@ func (d *peerMsgHandler) apply(committedEntries eraftpb.Entry) {
 	}
 
 	kvWB := new(engine_util.WriteBatch)
+	if req.AdminRequest != nil {
+		switch req.AdminRequest.CmdType {
+		case raft_cmdpb.AdminCmdType_CompactLog:
+			compactLog := req.AdminRequest.GetCompactLog()
+			if compactLog.CompactIndex > d.peerStorage.applyState.TruncatedState.Index {
+				d.peerStorage.applyState.TruncatedState.Index = compactLog.CompactIndex
+				d.peerStorage.applyState.TruncatedState.Term = compactLog.CompactTerm
+				log.Infof("%s compact log to %d", d.Tag, compactLog.CompactIndex)
+				d.ScheduleCompactLog(compactLog.CompactIndex)
+			}
+		}
+	}
+
 	for _, request := range req.Requests {
 		resp := new(raft_cmdpb.RaftCmdResponse)
 		resp.Header = &raft_cmdpb.RaftResponseHeader{

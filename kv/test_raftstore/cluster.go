@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/Connor1996/badger"
@@ -59,6 +60,10 @@ func (c *Cluster) Start() {
 
 	for storeID := uint64(1); storeID <= uint64(c.count); storeID++ {
 		dbPath, err := ioutil.TempDir("", c.baseDir)
+		// 如果是win系统
+		if runtime.GOOS == "windows" {
+			dbPath, err = ioutil.TempDir("d:/tmp", c.baseDir)
+		}
 		if err != nil {
 			panic(err)
 		}

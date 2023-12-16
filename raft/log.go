@@ -168,14 +168,12 @@ func newLog(storage Storage) *RaftLog {
 	}
 
 	entries, err := storage.Entries(firstIndex, lastIndex+1)
-	if err != nil {
-		panic(err)
-	}
+
 	// Initialize our committed and applied pointers to the time of the last compaction.
 	// committed和applied从持久化的第一个index的前一个开始
 	raftlog.committed = firstIndex - 1
 	raftlog.applied = firstIndex - 1
-	raftlog.stabled, _ = storage.LastIndex()
+	raftlog.stabled = lastIndex
 	raftlog.entries = entries
 	return raftlog
 }
@@ -185,6 +183,10 @@ func newLog(storage Storage) *RaftLog {
 // grow unlimitedly in memory
 func (l *RaftLog) maybeCompact() {
 	// Your Code Here (2C).
+	first, _ := l.storage.FirstIndex()
+	if first > l.FirstIndex() {
+		l.entries = l.entries[first-l.FirstIndex():]
+	}
 }
 
 // allEntries return all the entries not compacted.
@@ -241,6 +243,10 @@ func (l *RaftLog) LastIndex() uint64 {
 	// 如果entries不为空，则返回最后一条日志的索引
 	if len(l.entries) > 0 {
 		return l.entries[len(l.entries)-1].Index
+	}
+	// 否则如果快照存在，返回快照的meta数据中的索引
+	if l.pendingSnapshot != nil {
+		return l.pendingSnapshot.Metadata.Index
 	}
 	return l.zeroTermOnErrCompacted(l.storage.LastIndex())
 }
@@ -362,7 +368,11 @@ func (l *RaftLog) Term(i uint64) (uint64, error) {
 	if len(unstable) > 0 && i >= unstable[0].Index {
 		return unstable[i-unstable[0].Index].Term, nil
 	}
-
+	// 尝试从snapshot中查询term
+	if l.pendingSnapshot != nil && l.pendingSnapshot.Metadata.Index == i {
+		// 只有在正好快照meta数据的index的情况下才查得到，在这之前的都查不到term了
+		return l.pendingSnapshot.Metadata.Term, nil
+	}
 	// 尝试从storage中查询term
 	t, err := l.storage.Term(i)
 	if err == nil {
@@ -372,7 +382,17 @@ func (l *RaftLog) Term(i uint64) (uint64, error) {
 	if err == ErrCompacted || err == ErrUnavailable {
 		return 0, err
 	}
-	return l.entries[i].Term, nil
+	panic(err)
+	// return l.entries[i].Term, nil
+}
+
+// Snapshot 返回当前的快照数据
+func (l *RaftLog) Snapshot() (*pb.Snapshot, error) {
+	if l.pendingSnapshot != nil {
+		return l.pendingSnapshot, nil
+	}
+	snapshot, err := l.storage.Snapshot()
+	return &snapshot, err
 }
 
 // MatchTerm 判断索引i的term是否和term一致
@@ -382,6 +402,16 @@ func (l *RaftLog) MatchTerm(i, term uint64) bool {
 		return false
 	}
 	return t == term
+}
+
+// restore 使用快照数据进行恢复
+func (l *RaftLog) restore(s *pb.Snapshot) {
+	log.Infof("log starts to restore snapshot [%s index: %d, term: %d]", s, s.Metadata.Index, s.Metadata.Term)
+	l.committed = s.Metadata.Index
+	l.stabled = s.Metadata.Index
+	l.applied = s.Metadata.Index
+	l.pendingSnapshot = s
+	l.entries = nil
 }
 
 // 如果传入的err是nil，则返回t；如果是ErrCompacted则返回0，其他情况都panic

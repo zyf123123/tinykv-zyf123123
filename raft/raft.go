@@ -288,6 +288,25 @@ func (r *Raft) sendAppend(to uint64) bool {
 
 	if errt != nil || erre != nil { // send snapshot if we failed to get term or entries
 		// 如果前面过程中有错，那说明之前的数据都写到快照里了，尝试发送快照数据过去
+		// 尝试发送快照
+		m.MsgType = pb.MessageType_MsgSnapshot
+		snapshot, err := r.RaftLog.Snapshot()
+		if err != nil {
+			if err == ErrSnapshotTemporarilyUnavailable {
+				log.Info("%x failed to send snapshot to %x because snapshot is temporarily unavailable", r.id, to)
+				return false
+			}
+			panic(err) // TODO(bdarnell)
+		}
+		// 不能发送空快照
+		if IsEmptySnap(snapshot) {
+			panic("need non-empty snapshot")
+		}
+		m.Snapshot = snapshot
+		sindex, sterm := snapshot.Metadata.Index, snapshot.Metadata.Term
+		log.Infof("%x [firstindex: %d, commit: %d] sent snapshot[index: %d, term: %d] %s to %x",
+			r.id, r.RaftLog.FirstIndex(), r.RaftLog.committed, sindex, sterm, snapshot, to)
+		log.Debugf("%x paused sending replication messages to %x", r.id, to)
 	} else {
 		// 如果没有错，那么就发送entries数据
 		m.MsgType = pb.MessageType_MsgAppend
@@ -608,6 +627,10 @@ func stepFollower(r *Raft, m pb.Message) {
 		r.handleHeartbeat(m)
 		r.Lead = m.From
 		r.electionElapsed = 0
+	case pb.MessageType_MsgSnapshot:
+		r.handleSnapshot(m)
+		r.Lead = m.From
+		r.electionElapsed = 0
 	}
 }
 
@@ -628,6 +651,10 @@ func stepCandidate(r *Raft, m pb.Message) {
 		} else if r.quorum() <= len(r.votes)-gr {
 			r.becomeFollower(r.Term, None)
 		}
+	case pb.MessageType_MsgSnapshot:
+		// 收到快照消息，说明集群已经有leader，转换为follower
+		r.becomeFollower(m.Term, m.From)
+		r.handleSnapshot(m)
 	}
 }
 
@@ -703,7 +730,7 @@ func (r *Raft) handleAppendEntries(m pb.Message) {
 		return
 	}
 
-	log.Infof("%d handle append entries from %d", r.id, m.From)
+	// log.Infof("%d handle append entries from %d", r.id, m.From)
 	entries := make([]pb.Entry, len(m.Entries))
 	for i := range m.Entries {
 		entries[i] = *m.Entries[i]
@@ -736,6 +763,54 @@ func (r *Raft) handleHeartbeat(m pb.Message) {
 // handleSnapshot handle Snapshot RPC request
 func (r *Raft) handleSnapshot(m pb.Message) {
 	// Your Code Here (2C).
+	sindex, sterm := m.Snapshot.Metadata.Index, m.Snapshot.Metadata.Term
+	// 注意这里成功与失败，只是返回的Index参数不同
+	if r.restore(m.Snapshot) {
+		log.Infof("%x [commit: %d] restored snapshot [index: %d, term: %d]",
+			r.id, r.RaftLog.committed, sindex, sterm)
+		r.send(pb.Message{To: m.From, From: r.id, MsgType: pb.MessageType_MsgAppendResponse, Index: r.RaftLog.LastIndex(), Term: r.Term})
+	} else {
+		log.Infof("%x [commit: %d] ignored snapshot [index: %d, term: %d]",
+			r.id, r.RaftLog.committed, sindex, sterm)
+		r.send(pb.Message{To: m.From, From: r.id, MsgType: pb.MessageType_MsgAppendResponse, Index: r.RaftLog.committed, Term: r.Term})
+	}
+}
+
+// restore recovers the state machine from a snapshot. It restores the log and the
+// configuration of state machine.
+// 使用快照数据进行恢复
+func (r *Raft) restore(s *pb.Snapshot) bool {
+	// 首先判断快照索引的合法性
+	if s.Metadata.Index <= r.RaftLog.committed {
+		return false
+	}
+
+	// matchTerm返回true，说明本节点的日志中已经有对应的日志了
+	if r.RaftLog.MatchTerm(s.Metadata.Index, s.Metadata.Term) {
+		log.Infof("%x [commit: %d, lastindex: %d, lastterm: %d] fast-forwarded commit to snapshot [index: %d, term: %d]",
+			r.id, r.RaftLog.committed, r.RaftLog.LastIndex(), r.RaftLog.LastTerm(), s.Metadata.Index, s.Metadata.Term)
+		// 提交到快照所在的索引
+		r.RaftLog.CommitTo(s.Metadata.Index)
+		// 为什么这里返回false？
+		return false
+	}
+
+	log.Infof("%x [commit: %d, lastindex: %d, lastterm: %d] starts to restore snapshot [index: %d, term: %d]",
+		r.id, r.RaftLog.committed, r.RaftLog.LastIndex(), r.RaftLog.LastTerm(), s.Metadata.Index, s.Metadata.Term)
+
+	// 使用快照数据进行日志的恢复
+	r.RaftLog.restore(s)
+	r.Prs = make(map[uint64]*Progress)
+	// 包括集群中其他节点的状态也使用快照中的状态数据进行恢复
+	for _, n := range s.Metadata.ConfState.Nodes {
+		match, next := uint64(0), r.RaftLog.LastIndex()+1
+		if n == r.id {
+			match = next - 1
+		}
+		r.Prs[n] = &Progress{Next: next, Match: match}
+		log.Infof("%x restored progress of %x", r.id, n)
+	}
+	return true
 }
 
 // addNode add a new node to raft group

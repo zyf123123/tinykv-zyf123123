@@ -202,23 +202,23 @@ func (rn *RawNode) Ready() Ready {
 	if !reflect.DeepEqual(rn.PrevHardSt, rn.Raft.hardState()) {
 		rn.ReadyState.HardState = rn.Raft.hardState()
 	}
+	if !IsEmptySnap(rn.Raft.RaftLog.pendingSnapshot) {
+		rn.ReadyState.Snapshot = *rn.Raft.RaftLog.pendingSnapshot
+	}
 	return rn.ReadyState
 }
 
 // HasReady called when RawNode user need to check if any Ready pending.
 func (rn *RawNode) HasReady() bool {
 	// Your Code Here (2A).
-	rn.ReadyState = Ready{
-		Entries:          rn.Raft.RaftLog.unstableEntries(),
-		CommittedEntries: rn.Raft.RaftLog.nextEnts(),
-		Messages:         rn.Raft.msgs,
-	}
+	rn.ReadyState = rn.Ready()
 
 	return rn.ReadyState.SoftState != nil ||
 		!IsEmptyHardState(rn.ReadyState.HardState) ||
 		len(rn.ReadyState.Entries) > 0 ||
 		len(rn.ReadyState.CommittedEntries) > 0 ||
-		len(rn.ReadyState.Messages) > 0
+		len(rn.ReadyState.Messages) > 0 ||
+		!IsEmptySnap(&rn.ReadyState.Snapshot)
 }
 
 // Advance notifies the RawNode that the application has applied and saved progress in the
@@ -231,6 +231,8 @@ func (rn *RawNode) Advance(rd Ready) {
 		rn.Raft.RaftLog.stabled = rn.Raft.RaftLog.LastIndex()
 		rn.Raft.RaftLog.applied = rn.Raft.RaftLog.committed
 		rn.Raft.msgs = nil
+		rn.Raft.RaftLog.pendingSnapshot = nil
+		rn.Raft.RaftLog.maybeCompact()
 	}
 }
 
